@@ -1,4 +1,5 @@
 #include <cuda_runtime.h>
+#include <stdio.h>
 
 __global__ void vectorAdd(float* a, float* b, float* c, int N){
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
