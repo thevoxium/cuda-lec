@@ -10,6 +10,6 @@ int main(){
   dim3 threadsPerBlock(256, 1, 1);
   dim3 blocksPerGrid((N + threadsPerBlock.x - 1) / threadsPerBlock.x);
   hello<<<blocksPerGrid, threadsPerBlock>>>();
-cudaDeviceSynchronize();
+  cudaDeviceSynchronize();
   return 0;
 }
