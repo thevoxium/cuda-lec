@@ -1,6 +1,23 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
 
+#define TIME_KERNEL(...) do { \
+    cudaEvent_t start, stop; \
+    cudaEventCreate(&start); \
+    cudaEventCreate(&stop); \
+    cudaEventRecord(start); \
+    __VA_ARGS__; \
+    cudaEventRecord(stop); \
+    cudaEventSynchronize(stop); \
+    float ms = 0.0f; \
+    cudaEventElapsedTime(&ms, start, stop); \
+    printf("Time taken by %s: %.3f ms\n", #__VA_ARGS__, ms); \
+    cudaEventDestroy(start); \
+    cudaEventDestroy(stop); \
+} while(0)
+
+
+
 __global__ void vectorAdd(float* a, float* b, float* c, int N){
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < N){
@@ -35,24 +52,12 @@ int main(){
   cudaMemcpy(da, a, size, cudaMemcpyHostToDevice);
   cudaMemcpy(db, b, size, cudaMemcpyHostToDevice);
 
-  cudaEvent_t start, stop;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
-
 
   dim3 threadsPerBlock(256, 1, 1);
   dim3 blocksPerGrid((N + threadsPerBlock.x - 1) / threadsPerBlock.x);
 
-  cudaEventRecord(start);
-  vectorAdd<<<blocksPerGrid, threadsPerBlock>>>(da, db, dc, N);
+  TIME_KERNEL(vectorAdd<<<blocksPerGrid, threadsPerBlock>>>(da, db, dc, N));
   cudaDeviceSynchronize();
-  cudaEventRecord(stop);
-  cudaEventSynchronize(stop);
-
-  float elapsed;
-  cudaEventElapsedTime(&elapsed, start, stop);
-  printf("Kernel execution time: %f ms\n", elapsed);
-
 
   cudaMemcpy(c, dc, size, cudaMemcpyDeviceToHost);
 
