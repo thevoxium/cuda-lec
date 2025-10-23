@@ -35,11 +35,24 @@ int main(){
   cudaMemcpy(da, a, size, cudaMemcpyHostToDevice);
   cudaMemcpy(db, b, size, cudaMemcpyHostToDevice);
 
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+
+
   dim3 threadsPerBlock(256, 1, 1);
   dim3 blocksPerGrid((N + threadsPerBlock.x - 1) / threadsPerBlock.x);
 
+  cudaEventRecord(start);
   vectorAdd<<<blocksPerGrid, threadsPerBlock>>>(da, db, dc, N);
   cudaDeviceSynchronize();
+  cudaEventRecord(stop);
+  cudaEventSynchronize(stop);
+
+  float elapsed;
+  cudaEventElapsedTime(&elapsed, start, stop);
+  printf("Kernel execution time: %f ms\n", elapsed);
+
 
   cudaMemcpy(c, dc, size, cudaMemcpyDeviceToHost);
 
