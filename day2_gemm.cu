@@ -18,7 +18,7 @@
     cudaEventDestroy(stop); \
 } while(0)
 
-#define N (1 << 10)
+#define N (1 << 13)
 #define __threadCount 16
 
 __global__ void gemmNaive(float* da, float* db, float* dc){
@@ -68,9 +68,6 @@ int main(){
 
     cudaMemcpy(c, dc, size, cudaMemcpyDeviceToHost);
 
-    for (int j = 0; j < N; j++) printf("%f ", c[j]); printf("\n");
-
-
     //cublas implementation
 
     cublasHandle_t handle;
@@ -80,7 +77,7 @@ int main(){
     float beta = 0.0f;
 
     TIME_KERNEL(cublasSgemm(handle,
-        CUBLAS_OP_T, CUBLAS_OP_T,  // Transpose inputs
+        CUBLAS_OP_N, CUBLAS_OP_N,
         N,
         N,
         N,
@@ -91,10 +88,6 @@ int main(){
         dc_cublas, N));
 
     cudaMemcpy(c_cublas, dc_cublas, size, cudaMemcpyDeviceToHost);
-
-    printf("First row (cuBLAS GEMM):\n");
-    for (int j = 0; j < N; j++) printf("%f ", c_cublas[j]);
-    printf("\n");
 
     cublasDestroy(handle);
 
