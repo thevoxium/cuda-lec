@@ -18,23 +18,8 @@ __global__ void gemmNaive(float* da, float* db, float* dc, int N){
     }
 }
 
-float timeKernel(void(*kernel)(float*, float*, float*, int), float* da, float* db, float* dc, int N, dim3 bpg, dim3 tpb){
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start);
-    kernel<<<bpg, tpb>>>(da, db, dc, N);
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    float ms = 0.0f;
-    cudaEventElapsedTime(&ms, start, stop);
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
-    return ms;
-}
-
 int main(){
-    printf(" N      NaiveTime(ms)  NaiveGFLOPs  cuBLASTime(ms)  cuBLASGFLOPs\n");
+    printf(" N      NaiveTime(ms)  NaiveGFLOPs   NaiveGFLOPs/s   cuBLASTime(ms)  cuBLASGFLOPs   cuBLASGFLOPs/s\n");
     for(int N = 512; N <= 8192; N += 512){
         size_t size = N * N * sizeof(float);
         float* a = (float*)malloc(size);
@@ -68,10 +53,11 @@ int main(){
         gemmNaive<<<bpg, tpb>>>(da, db, dc, N);
         cudaEventRecord(stop);
         cudaEventSynchronize(stop);
-        float naiveTime = 0.0f;
-        cudaEventElapsedTime(&naiveTime, start, stop);
+        float naiveTimeMs = 0.0f;
+        cudaEventElapsedTime(&naiveTimeMs, start, stop);
 
-        float gflops_naive = 2.0f * N * N * N / (naiveTime * 1e6f);
+        float naiveGFLOPs = 2.0f * N * N * N / 1e9f;
+        float naiveGFLOPsPerSec = naiveGFLOPs / (naiveTimeMs / 1000.0f);
 
         cublasHandle_t handle;
         cublasCreate(&handle);
@@ -82,12 +68,15 @@ int main(){
         cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, N, N, &alpha, db, N, da, N, &beta, dc_cublas, N);
         cudaEventRecord(stop);
         cudaEventSynchronize(stop);
-        float cublasTime = 0.0f;
-        cudaEventElapsedTime(&cublasTime, start, stop);
+        float cublasTimeMs = 0.0f;
+        cudaEventElapsedTime(&cublasTimeMs, start, stop);
 
-        float gflops_cublas = 2.0f * N * N * N / (cublasTime * 1e6f);
+        float cublasGFLOPs = 2.0f * N * N * N / 1e9f;
+        float cublasGFLOPsPerSec = cublasGFLOPs / (cublasTimeMs / 1000.0f);
 
-        printf("%4d     %10.3f     %10.2f     %10.3f     %10.2f\n", N, naiveTime, gflops_naive, cublasTime, gflops_cublas);
+        printf("%4d     %10.3f     %10.2f     %13.2f     %13.3f     %12.2f     %15.2f\n",
+               N, naiveTimeMs, naiveGFLOPs, naiveGFLOPsPerSec,
+               cublasTimeMs, cublasGFLOPs, cublasGFLOPsPerSec);
 
         cublasDestroy(handle);
         free(a); free(b); free(c); free(c_cublas);
