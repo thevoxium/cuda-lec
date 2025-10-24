@@ -3,7 +3,22 @@
 #include <cublas_v2.h>
 #include <stdlib.h>
 
-#define N (1 << 8)
+#define TIME_KERNEL(...) do { \
+    cudaEvent_t start, stop; \
+    cudaEventCreate(&start); \
+    cudaEventCreate(&stop); \
+    cudaEventRecord(start); \
+    __VA_ARGS__; \
+    cudaEventRecord(stop); \
+    cudaEventSynchronize(stop); \
+    float ms = 0.0f; \
+    cudaEventElapsedTime(&ms, start, stop); \
+    printf("Time taken by %s: %.3f ms\n", #__VA_ARGS__, ms); \
+    cudaEventDestroy(start); \
+    cudaEventDestroy(stop); \
+} while(0)
+
+#define N (1 << 10)
 #define __threadCount 16
 
 __global__ void gemmNaive(float* da, float* db, float* dc){
@@ -48,7 +63,7 @@ int main(){
     dim3 tpb(__threadCount, __threadCount, 1);
     dim3 bpg((N+__threadCount-1)/__threadCount, (N+__threadCount-1)/__threadCount, 1);
 
-    gemmNaive<<<bpg, tpb>>>(da, db, dc);
+    TIME_KERNEL(gemmNaive<<<bpg, tpb>>>(da, db, dc));
     cudaDeviceSynchronize();
 
     cudaMemcpy(c, dc, size, cudaMemcpyDeviceToHost);
@@ -64,7 +79,7 @@ int main(){
     float alpha = 1.0f;
     float beta = 0.0f;
 
-    cublasSgemm(handle,
+    TIME_KERNEL(cublasSgemm(handle,
         CUBLAS_OP_T, CUBLAS_OP_T,  // Transpose inputs
         N,
         N,
@@ -73,7 +88,7 @@ int main(){
         db, N,
         da, N,
         &beta,
-        dc_cublas, N);
+        dc_cublas, N));
 
     cudaMemcpy(c_cublas, dc_cublas, size, cudaMemcpyDeviceToHost);
 
