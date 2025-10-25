@@ -3,22 +3,44 @@
 #include <cublas_v2.h>
 #include <stdlib.h>
 
-#define __threadCount 16
+#define TILE 16
 
-__global__ void gemmNaive(float* da, float* db, float* dc, int N){
-    int j = blockDim.x * blockIdx.x + threadIdx.x;
-    int i = blockDim.y * blockIdx.y + threadIdx.y;
-    if(i < N && j < N){
-        float sum = 0.0f;
-        for (int k=0; k < N; ++k){
-            sum += da[i * N + k] * db[k * N + j];
-        }
-        dc[i * N + j] = sum;
+__global__ void gemmTiled(float* da, float* db, float* dc, int N){
+    int row = blockDim.y * blockIdx.y + threadIdx.y;
+    int col = blockDim.x * blockIdx.x + threadIdx.x;
+
+    __shared__ float As[TILE][TILE];
+    __shared__ float Bs[TILE][TILE];
+
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+
+    float sum = 0.0f;
+    for (int t = 0; t < (N + TILE - 1) / TILE; ++t) {
+      As[ty][tx] = (row < N && t*TILE + tx < N)
+        ? da[row * N + (t*TILE + tx)]
+        : 0.0f;
+
+      Bs[ty][tx] = (col < N && t*TILE + ty < N)
+        ? db[(t*TILE + ty) * N + col]
+        : 0.0f;
+
+      __syncthreads();
+
+      for (int k = 0; k < TILE; ++k)
+        sum += As[ty][k] * Bs[k][tx];
+
+      __syncthreads();
     }
+
+    if (row < N && col < N){
+      dc[row * N + col] = sum;
+    }
+
 }
 
 int main(){
-    printf(" N      NaiveTime(ms)  NaiveGFLOPs   NaiveGFLOPs/s   cuBLASTime(ms)  cuBLASGFLOPs   cuBLASGFLOPs/s\n");
+    printf(" N      tiledTime(ms)  tiledGFLOPs   tiledGFLOPs/s   cuBLASTime(ms)  cuBLASGFLOPs   cuBLASGFLOPs/s\n");
     for(int N = 512; N <= 8192; N += 512){
         size_t size = N * N * sizeof(float);
         float* a = (float*)malloc(size);
@@ -42,15 +64,15 @@ int main(){
         cudaMemcpy(da, a, size, cudaMemcpyHostToDevice);
         cudaMemcpy(db, b, size, cudaMemcpyHostToDevice);
 
-        dim3 tpb(__threadCount, __threadCount, 1);
-        dim3 bpg((N+__threadCount-1)/__threadCount, (N+__threadCount-1)/__threadCount, 1);
+        dim3 tpb(TILE, TILE, 1);
+        dim3 bpg((N+TILE-1)/TILE, (N+TILE-1)/TILE, 1);
 
         cudaEvent_t start, stop;
         cudaEventCreate(&start);
         cudaEventCreate(&stop);
 
         cudaEventRecord(start);
-        gemmNaive<<<bpg, tpb>>>(da, db, dc, N);
+        gemmTiled<<<bpg, tpb>>>(da, db, dc, N);
         cudaEventRecord(stop);
         cudaEventSynchronize(stop);
         float naiveTimeMs = 0.0f;
