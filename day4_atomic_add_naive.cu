@@ -25,6 +25,7 @@ __global__ void atomicAddNaive(const double* d_a, double* d_out, int N){
   }
 }
 
+
 int main(){
   int N = 1 << 20;
   int size = N * sizeof(double);
